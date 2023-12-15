@@ -470,6 +470,41 @@ namespace IMG
         private int _MipMapCount;
         private string _Data;
         
+        int3 GetLevelSize(int mipMapLevel) const
+        {
+            int width = _Width;
+            int height = _Height;
+            int depth = _Depth;
+            for (int i = 0; i < mipMapLevel; ++i)
+            {
+                width = _::Max(1, width / 2);
+                height = _::Max(1, height / 2);
+                depth = _::Max(1, depth / 2);
+            }
+            return int3(width, height, depth);
+        }
+        
+        int GetMaxLevel() const
+        {
+            return _MipMapCount - 1;
+        }
+        
+        int GetBestLevel(int minDesiredWidth, int minDesiredHeight, int minDesiredDepth = 0) const
+        {
+            minDesiredWidth = minDesiredWidth < 0 ? _Width : minDesiredWidth;
+            minDesiredHeight = minDesiredHeight < 0 ? _Height : minDesiredHeight;
+            minDesiredDepth = minDesiredDepth < 0 ? _Depth : minDesiredDepth;
+            for (int level = 1; level < _MipMapCount; ++level)
+            {
+                int3 levelSize = GetLevelSize(level);
+                if (levelSize.x < minDesiredWidth || levelSize.y < minDesiredHeight || levelSize.z < minDesiredDepth)
+                {
+                    return level - 1;
+                }
+            }
+            return GetMaxLevel();
+        }
+        
         RawImage@ DecompressLevel(int mipMapLevel)
         {
             switch (_Format)
@@ -485,7 +520,7 @@ namespace IMG
                 
                 int blockSize = _Format == CompressedFormat::DXT1 ? 8 : 16;
                 int dataOffset = 0;
-                for (int i = 0; i <= mipMapLevel; ++i)
+                for (int i = 0; i < mipMapLevel; ++i)
                 {
                     uint blockCountWidth = (rawImage.Width + 3) / 4;
                     uint blockCountHeight = (rawImage.Height + 3) / 4;
@@ -495,6 +530,7 @@ namespace IMG
                     rawImage.Height = _::Max(1, rawImage.Height / 2);
                     rawImage.Depth = _::Max(1, rawImage.Depth / 2);
                 }
+                print(rawImage.Width + " " + rawImage.Height);
                 
                 rawImage.Data = _::DecompressDXTImage(_Format, _Data, dataOffset, rawImage.Width, rawImage.Height, rawImage.Depth);
                 return @rawImage;
@@ -507,49 +543,7 @@ namespace IMG
         
         RawImage@ DecompressSize(int minWidth, int minHeight, int minDepth = 0)
         {
-            minWidth = minWidth < 0 ? _Width : minWidth;
-            minHeight = minHeight < 0 ? _Height : minHeight;
-            minDepth = minDepth < 0 ? _Depth : minDepth;
-            
-            switch (_Format)
-            {
-            case DXT1:
-            case DXT3:
-            case DXT5:
-            {
-                RawImage@ rawImage = RawImage();
-                rawImage.Width = _Width;
-                rawImage.Height = _Height;
-                rawImage.Depth = _Depth;
-                
-                int blockSize = _Format == CompressedFormat::DXT1 ? 8 : 16;
-                int dataOffset = 0;
-                for (int i = 0; i < _MipMapCount - 1; ++i)
-                {
-                    uint blockCountWidth = (rawImage.Width + 3) / 4;
-                    uint blockCountHeight = (rawImage.Height + 3) / 4;
-                    
-                    int nextWidth = _::Max(1, rawImage.Width / 2);
-                    int nextHeight = _::Max(1, rawImage.Height / 2);
-                    int nextDepth = _::Max(1, rawImage.Depth / 2);
-                    if ((nextWidth < minWidth) or (nextHeight < minHeight) or (nextDepth < minDepth))
-                    {
-                        break;
-                    }
-                    
-                    dataOffset += blockSize * blockCountWidth * blockCountHeight * rawImage.Depth;
-                    rawImage.Width = nextWidth;
-                    rawImage.Height = nextHeight;
-                    rawImage.Depth = nextDepth;
-                }
-                
-                rawImage.Data = _::DecompressDXTImage(_Format, _Data, dataOffset, rawImage.Width, rawImage.Height, rawImage.Depth);
-                return @rawImage;
-            }
-            default:
-                warn("Not implemented: only DXT1,2,3 compressions are supported.");
-                return null;
-            }
+            return DecompressLevel(GetBestLevel(minWidth, minHeight, minDepth));
         }
     }
     
@@ -724,58 +718,5 @@ namespace IMG
     {
         IO::File file(filepath, IO::FileMode::Read);
         return LoadDdsContainer(file.Read(file.Size()));
-    }
-    
-    UI::Texture@ LoadTexture(MemoryBuffer@ source, int minWidth = -1, int minHeight = -1)
-    {
-        if (IsDds(source))
-        {
-            DdsContainer@ ddsContainer = LoadDdsContainer(@source);
-            if ((ddsContainer is null) or (ddsContainer.Images.Length < 1))
-            {
-                return null;
-            }
-            
-            RawImage@ rawImage = ddsContainer.Images[0].DecompressSize(minWidth, minHeight);
-            if (rawImage is null)
-            {
-                return null;
-            }
-            
-            return rawImage.ToTexture();
-        }
-        
-        return UI::LoadTexture(source);
-    }
-    
-    UI::Texture@ LoadTexture(const string&in filepath, int minWidth = -1, int minHeight = -1)
-    {
-        IO::File file(filepath, IO::FileMode::Read);
-        return LoadTexture(file.Read(file.Size()), minWidth, minHeight);
-    }
-}
-
-namespace Example
-{
-    // Supports: simple DXT1,3,5 images, with or without mip maps
-    // Not yet supported:
-    // - cube maps
-    // - DXT10 (so no arrays of images)
-    // - non-DXT1,3,5 compressions
-    
-    void Example()
-    {
-        string filepath = IO::FromUserGameFolder("Skins/Stadium/ModWork/Image/PlatformTech_D.dds");
-        
-        // 1. The "I just want to load trackmania files" version
-        UI::Texture@ texture = IMG::LoadTexture(filepath);
-        
-        // 2. The "Ok but I don't need to load 4k textures" version
-        UI::Texture@ texture128p = IMG::LoadTexture(filepath, 128, 128); 
-        
-        // 3. Hands-on versions
-        IMG::DdsContainer@ ddsContainer = IMG::LoadDdsContainer(IO::FromUserGameFolder("Skins/Stadium/ModWork/Image/PlatformTech_D.dds"));
-        UI::Texture@ textureLevel3 = ddsContainer.Images[0].DecompressLevel(3).ToTexture();
-        UI::Texture@ texture256p = UI::LoadTexture(ddsContainer.Images[0].DecompressSize(256, 256).ToBitmap());
     }
 }
