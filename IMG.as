@@ -128,10 +128,7 @@ namespace IMG
                 indices[4 * i + 0] = (packed >> 0) & 3;
                 indices[4 * i + 1] = (packed >> 2) & 3;
                 indices[4 * i + 2] = (packed >> 4) & 3;
-                if (isDXT1)
-                {
-                    indices[4 * i + 3] = (packed >> 6) & 3;
-                }
+                indices[4 * i + 3] = (packed >> 6) & 3;
             }
             
             for (int i = 0; i < 16; ++i)
@@ -153,7 +150,7 @@ namespace IMG
         {
             for (int i = 0; i < 8; ++i)
             {
-                uint8 quant = sourceData[alphaBlockOffset];
+                uint8 quant = sourceData[alphaBlockOffset + i];
                 uint8 low = quant & 0x0f;
                 uint8 high = quant & 0xf0;
                 decompressedBlock[8 * i + 3] = low | (low << 4);
