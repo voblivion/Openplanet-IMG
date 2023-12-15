@@ -530,7 +530,6 @@ namespace IMG
                     rawImage.Height = _::Max(1, rawImage.Height / 2);
                     rawImage.Depth = _::Max(1, rawImage.Depth / 2);
                 }
-                print(rawImage.Width + " " + rawImage.Height);
                 
                 rawImage.Data = _::DecompressDXTImage(_Format, _Data, dataOffset, rawImage.Width, rawImage.Height, rawImage.Depth);
                 return @rawImage;
