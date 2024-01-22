@@ -137,10 +137,6 @@ namespace IMG
                 decompressedBlock[4 * i + 0] = codes[offset + 0];
                 decompressedBlock[4 * i + 1] = codes[offset + 1];
                 decompressedBlock[4 * i + 2] = codes[offset + 2];
-                if (isDXT1)
-                {
-                    decompressedBlock[4 * i + 3] = codes[offset + 3];
-                }
             }
             
             return colorBlockOffset + 8;
@@ -222,6 +218,13 @@ namespace IMG
             {
                 blockOffset = DecompressDXT5AlphaBlock(sourceData, blockOffset, decompressedBlock);
             }
+            else
+            {
+                for (int i = 0; i < 16; ++i)
+                {
+                    decompressedBlock[4 * i + 3] = 255;
+                }
+            }
             
             return DecompressDXTColorBlock(format == CompressedFormat::DXT1, sourceData, blockOffset, decompressedBlock);
         }
@@ -232,6 +235,8 @@ namespace IMG
             int pixelDataSize = width * height * 4 * depth;
             MemoryBuffer@ pixelDataBuffer = MemoryBuffer(pixelDataSize);
             string pixelData = pixelDataBuffer.ReadString(pixelDataSize);
+            
+            int nextYieldCounter = 64 * 64;
             
             int blockOffset = sourceOffset;
             array<uint8> decompressedBlock(16 * 4);
@@ -263,6 +268,13 @@ namespace IMG
                                     decompressedBlockIndex += 4;
                                 }
                             }
+                        }
+                        
+                        nextYieldCounter -= 4;
+                        if (nextYieldCounter <= 0)
+                        {
+                            yield();
+                            nextYieldCounter = 64 * 64;
                         }
                     }
                 }
